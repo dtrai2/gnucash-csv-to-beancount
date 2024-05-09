@@ -12,7 +12,7 @@ enabled = true
 name = "g2b"
 description = "Initialize a beancount ledger from a GnuCash CSV export"
 dynamic = ["version"]
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 readme = "README.md"
 license = { file = "LICENSE" }
 classifiers = [
@@ -48,7 +48,7 @@ dev = [
   "pylint",
   "pytest",
   "pytest-cov",
-  "converage",
+  "coverage",
   "ruff"
 ]
 
