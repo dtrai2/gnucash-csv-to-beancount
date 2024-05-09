@@ -1,14 +1,18 @@
 [build-system]
-requires = ["setuptools>=68.0.0", "wheel"]
+requires = ["setuptools>=68.0.0", "wheel", "setuptools-git-versioning>=2.0,<3"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
 packages = ["g2b"]
 
+[tool.setuptools-git-versioning]
+enabled = true
+
 [project]
 name = "g2b"
 description = "Initialize a beancount ledger from a GnuCash CSV export"
-requires-python = ">=3.11"
+dynamic = ["version"]
+requires-python = ">=3.10"
 readme = "README.md"
 license = { file = "LICENSE" }
 classifiers = [
@@ -16,7 +20,9 @@ classifiers = [
   "License :: OSI Approved :: MIT License",
   "Programming Language :: Python",
   "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
   "Topic :: Office/Business :: Financial :: Accounting",
 ]
 keywords = [
@@ -37,14 +43,13 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-
 dev = [
   "black",
   "pylint",
   "pytest",
   "pytest-cov",
-  "converage",
-  "ruff",
+  "coverage",
+  "ruff"
 ]
 
 [project.scripts]

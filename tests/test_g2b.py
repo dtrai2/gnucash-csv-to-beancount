@@ -1,3 +1,6 @@
+# pylint: disable=missing-docstring
+# pylint: disable=attribute-defined-outside-init
+# pylint: disable=protected-access
 import datetime
 import re
 from pathlib import Path, PosixPath
