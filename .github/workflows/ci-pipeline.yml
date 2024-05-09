@@ -1,0 +1,53 @@
+name: CI Pipeline
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: "pip"
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install .[dev]
+      - name: Perform pytest
+        run: |
+          pytest -vv tests/unit --cov=g2b --cov-report=xml
+
+  code-quality:
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        python-version: ["3.11"]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: "pip"
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip pylint
+          pip install .[dev]
+      - name: check black formating
+        run: |
+          black --check --diff --config ./pyproject.toml .
+      - name: lint changed and added files
+        run: |
+          pylint --rcfile=.pylintrc --fail-under 9.5 .
