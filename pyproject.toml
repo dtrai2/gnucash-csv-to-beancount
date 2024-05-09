@@ -1,12 +1,11 @@
 [build-system]
-requires = ["setuptools>=68.0.0", "wheel", "setuptools-git-versioning>=2.0,<3"]
+requires = ["setuptools>=68.0.0", "wheel", "setuptools_scm>=8"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
 packages = ["g2b"]
 
-[tool.setuptools-git-versioning]
-enabled = true
+[tool.setuptools_scm]
 
 [project]
 name = "g2b"
