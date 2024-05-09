@@ -119,9 +119,9 @@ class GnuCashCSV2Beancount:
         beancount ledger can be exported.
         """
         self._logger.info("Start converting GnuCash CSV File to Beancount")
-        self._logger.debug(f"Input file: {self._filepath}")
-        self._logger.debug(f"Config file: {self._config_path}")
-        self._logger.debug(f"Config: {self._configs}")
+        self._logger.debug("Input file: %s", self._filepath)
+        self._logger.debug("Config file: %s", self._config_path)
+        self._logger.debug("Config: %s", self._configs)
         self._prepare_csv()
         openings = self._get_open_account_directives()
         transactions = self._get_transaction_directives()
@@ -129,7 +129,7 @@ class GnuCashCSV2Beancount:
             file.write(self._get_header_str())
             file.write(self._get_commodities_str())
             printer.print_entries(openings + transactions, file=file)
-        self._logger.info(f"Finished writing beancount file: '{self._output_path}'")
+        self._logger.info("Finished writing beancount file: '%s'", self._output_path)
         self._verify_output()
 
     def _prepare_csv(self) -> None:
@@ -138,14 +138,14 @@ class GnuCashCSV2Beancount:
         self._dataframe = pd.read_csv(self._filepath)
         self._dataframe.columns = self._CSV_COLUMN_NAMES
         self._dataframe["FullAccountName"] = self._dataframe["FullAccountName"].apply(
-            lambda x: self._apply_renaming_patterns(x)
+            self._apply_renaming_patterns
         )
         thousands_symbol = self._gnucash_config.get("thousands_symbol", ",")
         decimal_symbol = self._gnucash_config.get("decimal_symbol", ".")
         for col in ["Rate", "ValueNumerical"]:
             self._dataframe[col] = self._dataframe[col].str.replace(thousands_symbol, "")
             self._dataframe[col] = self._dataframe[col].str.replace(decimal_symbol, ".")
-        self._dataframe["Rate"] = self._dataframe["Rate"].apply(lambda x: simple_eval(x))
+        self._dataframe["Rate"] = self._dataframe["Rate"].apply(simple_eval)
         for col in ["Rate", "ValueNumerical"]:
             self._dataframe[col] = pd.to_numeric(self._dataframe[col])
         self._dataframe["Date"] = pd.to_datetime(self._dataframe["Date"], format="%d.%m.%Y")
@@ -196,7 +196,7 @@ class GnuCashCSV2Beancount:
         """
         entries = []
         groups = self._dataframe.groupby(by="BookingID")
-        for transaction_id, group in track(groups, description="Parsing Transactions..."):
+        for _, group in track(groups, description="Parsing Transactions..."):
             postings = self._get_transaction_postings(group)
             transaction = self._get_transaction(group, postings)
             entries.append(transaction)
@@ -212,7 +212,7 @@ class GnuCashCSV2Beancount:
         """
         postings = []
         default_currency = self._gnucash_config.get("default_currency")
-        for index, row in transaction_group.iterrows():
+        for _, row in transaction_group.iterrows():
             currency = self._non_default_account_currencies.get(
                 row["FullAccountName"], default_currency
             )
@@ -271,8 +271,10 @@ class GnuCashCSV2Beancount:
         unique_descriptions = transaction_group["Description"].unique()
         if len(unique_descriptions) > 1:
             self._logger.warning(
-                f"More than one description found for a transaction: {unique_descriptions},"
-                f"using only first description: '{transaction_group['Description'].iloc[0]}'"
+                "More than one description found for a transaction: %s, "
+                "using only first description: '%s'",
+                unique_descriptions,
+                transaction_group["Description"].iloc[0]
             )
         reconciliations = transaction_group["Reconciliation"].values
         # if one symbol is not reconciled mark all as not reconciled with !
@@ -337,9 +339,9 @@ class GnuCashCSV2Beancount:
         if not parsing_errors and not validation_errors:
             self._logger.info("No parsing or validation errors found")
         if parsing_errors:
-            self._logger.warning(f"Found {len(parsing_errors)} parsing errors")
+            self._logger.warning("Found %s parsing errors", len(parsing_errors))
         if validation_errors:
-            self._logger.warning(f"Found {len(validation_errors)} validation errors")
+            self._logger.warning("Found %s validation errors", len(validation_errors))
 
 
 @click.command()
@@ -366,4 +368,4 @@ def main(input_path: Path, output: Path, config: Path) -> None:
 
 
 if __name__ == "__main__":
-    main()
+    main()  # pylint: disable=no-value-for-parameter)

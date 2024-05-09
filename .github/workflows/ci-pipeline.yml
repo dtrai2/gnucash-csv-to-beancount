@@ -50,4 +50,4 @@ jobs:
           black --check --diff --config ./pyproject.toml .
       - name: lint changed and added files
         run: |
-          pylint --rcfile=.pylintrc --fail-under 9.5 .
+          pylint --rcfile=.pylintrc --fail-under 9.5 g2b/ tests/

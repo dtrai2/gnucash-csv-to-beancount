@@ -1,2 +1,5 @@
 [FORMAT]
 max-line-length=100
+
+[MESAGES CONTROL]
+disable=too-few-public-methods
