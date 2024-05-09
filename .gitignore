@@ -1,0 +1,11 @@
+__pycache__/
+.cache/
+.pytest_cache/
+.venv
+*.prof
+*.pyc
+build/
+dist/
+*.beancount
+*.csv
+config.yaml
