@@ -30,4 +30,4 @@ jobs:
     - name: Build package
       run: pip wheel --no-deps --wheel-dir ./dist .
     - name: Publish package
-      uses: pypa/gh-action-pypi-publish@27b31702a0e7fc50959f5ad993c78deac1bdfc29
+      uses: pypa/gh-action-pypi-publish@release/v1
