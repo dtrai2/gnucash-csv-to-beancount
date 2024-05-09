@@ -1,4 +1,5 @@
 """This module provides a converter that can translate a gnucash csv export into a beancount file"""
+
 import logging
 import re
 from functools import cached_property

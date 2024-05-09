@@ -25,7 +25,7 @@ jobs:
           pip install .[dev]
       - name: Perform pytest
         run: |
-          pytest -vv tests/unit --cov=g2b --cov-report=xml
+          pytest -vv tests --cov=g2b --cov-report=xml
 
   code-quality:
     runs-on: ubuntu-22.04
