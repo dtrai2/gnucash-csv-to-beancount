@@ -1,13 +1,17 @@
 [build-system]
-requires = ["setuptools>=68.0.0", "wheel"]
+requires = ["setuptools>=68.0.0", "wheel", "setuptools-git-versioning>=2.0,<3"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
 packages = ["g2b"]
 
+[tool.setuptools-git-versioning]
+enabled = true
+
 [project]
 name = "g2b"
 description = "Initialize a beancount ledger from a GnuCash CSV export"
+dynamic = ["version"]
 requires-python = ">=3.11"
 readme = "README.md"
 license = { file = "LICENSE" }
