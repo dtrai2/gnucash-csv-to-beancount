@@ -274,7 +274,7 @@ class GnuCashCSV2Beancount:
                 "More than one description found for a transaction: %s, "
                 "using only first description: '%s'",
                 unique_descriptions,
-                transaction_group["Description"].iloc[0]
+                transaction_group["Description"].iloc[0],
             )
         reconciliations = transaction_group["Reconciliation"].values
         # if one symbol is not reconciled mark all as not reconciled with !
