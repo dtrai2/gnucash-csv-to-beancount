@@ -43,14 +43,13 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-
 dev = [
   "black",
   "pylint",
   "pytest",
   "pytest-cov",
   "converage",
-  "ruff",
+  "ruff"
 ]
 
 [project.scripts]

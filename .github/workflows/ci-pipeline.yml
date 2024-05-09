@@ -21,7 +21,7 @@ jobs:
           cache: "pip"
       - name: Install dependencies
         run: |
-          pip install --upgrade pip
+          pip install --upgrade pip wheel
           pip install .[dev]
       - name: Perform pytest
         run: |
