@@ -51,6 +51,12 @@ dev = [
   "ruff"
 ]
 
+[project.urls]
+Homepage = "https://github.com/dtrai2/gnucash-csv-to-beancount"
+Documentation = "https://github.com/dtrai2/gnucash-csv-to-beancount/blob/main/README.md"
+Repository = "https://github.com/dtrai2/gnucash-csv-to-beancount"
+Issues = "https://github.com/dtrai2/gnucash-csv-to-beancount/issues"
+
 [project.scripts]
 g2b = "g2b.g2b:main"
 
