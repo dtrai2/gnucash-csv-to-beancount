@@ -1,5 +1,6 @@
 """This module provides a converter that can translate a gnucash csv export into a beancount file"""
 
+import datetime
 import logging
 import re
 from functools import cached_property
@@ -90,7 +91,13 @@ class GnuCashCSV2Beancount:
     @cached_property
     def _bean_config(self) -> Dict:
         """Returns configurations only related to the beancount export"""
-        return self._configs.get("beancount")
+        config = self._configs.get("beancount")
+        switched_to_bean_event = {datetime.date.today(): "misc Changed from GnuCash to Beancount"}
+        if "events" in config:
+            config["events"].update(switched_to_bean_event)
+        else:
+            config["events"] = switched_to_bean_event
+        return config
 
     @cached_property
     def _account_rename_patterns(self) -> List:
@@ -125,10 +132,11 @@ class GnuCashCSV2Beancount:
         self._prepare_csv()
         openings = self._get_open_account_directives()
         transactions = self._get_transaction_directives()
+        events = self._events()
         with open(self._output_path, "w", encoding="utf8") as file:
             file.write(self._get_header_str())
             file.write(self._get_commodities_str())
-            printer.print_entries(openings + transactions, file=file)
+            printer.print_entries(events + openings + transactions, file=file)
         self._logger.info("Finished writing beancount file: '%s'", self._output_path)
         self._verify_output()
 
@@ -342,6 +350,14 @@ class GnuCashCSV2Beancount:
             self._logger.warning("Found %s parsing errors", len(parsing_errors))
         if validation_errors:
             self._logger.warning("Found %s validation errors", len(validation_errors))
+
+    def _events(self):
+        """Parse beancount configuration and create event directives"""
+        events = []
+        for date, event_description in self._bean_config.get("events", {}).items():
+            event_type, description = event_description.split(" ", maxsplit=1)
+            events.append(data.Event(date=date, type=event_type, description=description, meta={}))
+        return events
 
 
 @click.command()
