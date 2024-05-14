@@ -103,6 +103,26 @@ class TestGnuCashCSV2Beancount:
         with pytest.raises(G2BException, match="Error while parsing config file"):
             _ = GnuCashCSV2Beancount(Path(), Path(), config_path)
 
+    def test_bean_config_adds_switched_to_beancount_event_if_no_events_are_configured(
+        self, tmp_path
+    ):
+        config_path = tmp_path / "config.yaml"
+        config_path.write_text(yaml.dump(self.test_config))
+        g2b = GnuCashCSV2Beancount(Path(), Path(), config_path)
+        assert g2b._bean_config.get("events") == {
+            datetime.date.today(): "misc Changed from GnuCash to Beancount"
+        }
+
+    def test_bean_config_adds_switched_to_beancount_event_if_events_are_configured(self, tmp_path):
+        config_path = tmp_path / "config.yaml"
+        self.test_config["beancount"]["events"] = {datetime.date.today(): "test Test Event"}
+        config_path.write_text(yaml.dump(self.test_config))
+        g2b = GnuCashCSV2Beancount(Path(), Path(), config_path)
+        assert g2b._bean_config.get("events") == {
+            datetime.date.today(): "test Test Event",
+            datetime.date.today(): "misc Changed from GnuCash to Beancount",
+        }
+
     def test_converter_config_returns_only_converter_configurations(self, tmp_path):
         config_path = tmp_path / "config.yaml"
         config_path.write_text(yaml.dump(self.test_config))
@@ -425,3 +445,17 @@ option "title" "Exported GnuCash Book"
         g2b = GnuCashCSV2Beancount(gnucash_path, Path(), config_path)
         g2b._verify_output()
         mock_validate.assert_called()
+
+    def test_events_created_beancount_event_objects(self, tmp_path):
+        config_path = tmp_path / "config.yaml"
+        config_path.write_text(yaml.dump(self.test_config))
+        g2b = GnuCashCSV2Beancount(Path(), Path(), config_path)
+        events = g2b._events()
+        assert events == [
+            data.Event(
+                date=datetime.date.today(),
+                type="misc",
+                description="Changed from GnuCash to Beancount",
+                meta={},
+            )
+        ]

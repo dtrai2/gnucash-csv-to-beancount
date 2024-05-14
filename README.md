@@ -54,6 +54,9 @@ beancount:  # here you can add beancount options and plugins that should be adde
     - "beancount.plugins.coherent_cost"
     - "beancount.plugins.nounused"
     - "beancount.plugins.auto"
+  events:
+    2024-05-05: type description string  # optional events that should be added to the output, the
+                                         # first space is used to split between space and description
 ```
 
 ## Execute g2b
