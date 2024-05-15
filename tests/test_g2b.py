@@ -40,9 +40,7 @@ class TestCLI:
         command = f"-i test.gnucash -o book.beancount -c {config_path}"
         result = self.cli_runner.invoke(main, command.split())
         assert result.exit_code == 2, f"{result.exc_info}"
-        assert re.match(
-            r".*Path 'test.gnucash' does not exist.*", result.output, flags=re.DOTALL
-        )
+        assert re.match(r".*Path 'test.gnucash' does not exist.*", result.output, flags=re.DOTALL)
 
     def test_cli_raises_on_non_existing_config_file(self, tmp_path):
         gnucash_path = tmp_path / "book.gnucash"
