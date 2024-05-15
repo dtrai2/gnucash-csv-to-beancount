@@ -36,7 +36,7 @@ dependencies = [
   "click",
   "rich",
   "pyyaml",
-  "piecash"
+#  "piecash"
 ]
 
 [project.optional-dependencies]
