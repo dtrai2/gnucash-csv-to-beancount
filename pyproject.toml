@@ -11,7 +11,7 @@ packages = ["g2b"]
 name = "g2b"
 description = "Initialize a beancount ledger from a GnuCash file"
 dynamic = ["version"]
-requires-python = ">=3.10"
+requires-python = ">=3.10<"
 readme = "README.md"
 license = { file = "LICENSE" }
 classifiers = [
@@ -21,7 +21,6 @@ classifiers = [
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
-  "Programming Language :: Python :: 3.12",
   "Topic :: Office/Business :: Financial :: Accounting",
 ]
 keywords = [
@@ -36,7 +35,7 @@ dependencies = [
   "click",
   "rich",
   "pyyaml",
-#  "piecash"
+  "piecash"
 ]
 
 [project.optional-dependencies]
