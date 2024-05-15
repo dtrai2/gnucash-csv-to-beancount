@@ -9,7 +9,7 @@ packages = ["g2b"]
 
 [project]
 name = "g2b"
-description = "Initialize a beancount ledger from a GnuCash CSV export"
+description = "Initialize a beancount ledger from a GnuCash file"
 dynamic = ["version"]
 requires-python = ">=3.10"
 readme = "README.md"
@@ -27,18 +27,16 @@ classifiers = [
 keywords = [
   "gnucash",
   "beancount",
-  "csv",
   "finance",
   "accounting"
 ]
 
 dependencies = [
-  "pandas",
   "beancount",
   "click",
   "rich",
   "pyyaml",
-  "simpleeval"
+  "piecash"
 ]
 
 [project.optional-dependencies]

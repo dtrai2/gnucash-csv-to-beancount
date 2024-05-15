@@ -1,14 +1,16 @@
-"""This module provides a converter that can translate a gnucash csv export into a beancount file"""
+"""This module provides a converter that can translate a gnucash sql file into a beancount file"""
 
 import datetime
 import logging
+import os.path
 import re
+from collections import defaultdict
 from functools import cached_property
 from pathlib import Path
 from typing import Dict, List
 
 import click
-import pandas as pd
+import piecash
 import yaml
 from beancount.core import data, amount
 from beancount.core.number import D
@@ -16,9 +18,9 @@ from beancount.ops import validation
 from beancount.ops.validation import validate
 from beancount.parser import printer
 from beancount.parser.parser import parse_file
+from piecash._common import GnucashException
 from rich.logging import RichHandler
 from rich.progress import track
-from simpleeval import simple_eval
 
 logging.basicConfig(
     level="NOTSET",
@@ -27,13 +29,15 @@ logging.basicConfig(
     handlers=[RichHandler(omit_repeated_times=False)],
 )
 
+logger = logging.getLogger("g2b")
+
 
 class G2BException(Exception):
     """Default Error for Exceptions"""
 
 
-class GnuCashCSV2Beancount:
-    """Application to convert a gnucash csv export to a beancount ledger"""
+class GnuCash2Beancount:
+    """Application to convert a gnucash sql file to a beancount ledger"""
 
     _DEFAULT_ACCOUNT_RENAME_PATTERNS = [
         (r"\s", "-"),
@@ -46,28 +50,6 @@ class GnuCashCSV2Beancount:
         ("---", "-"),
     ]
     """Pattern for character replacements in account names"""
-
-    _CSV_COLUMN_NAMES = [
-        "Date",
-        "BookingID",
-        "Number",
-        "Description",
-        "Remark",
-        "Commodity",
-        "CancellationReason",
-        "Action",
-        "BookingText",
-        "FullAccountName",
-        "AccountName",
-        "ValueWithSymbol",
-        "ValueNumerical",
-        "ValueWithSymbol2",
-        "ValueNumerical2",
-        "Reconciliation",
-        "ReconciliationDate",
-        "Rate",
-    ]
-    """List of column names that will be applied to the csv export"""
 
     @cached_property
     def _configs(self) -> Dict:
@@ -114,50 +96,137 @@ class GnuCashCSV2Beancount:
 
     def __init__(self, filepath: Path, output: Path, config: Path):
         self._filepath = filepath
+        self._book = None
         self._output_path = output
         self._config_path = config
-        self._dataframe = None
-        self._logger = logging.getLogger("g2b")
-        self._logger.setLevel(self._converter_config.get("loglevel", "INFO"))
+        self._commodities = defaultdict(list)
+        logging.getLogger().setLevel(self._converter_config.get("loglevel", "INFO"))
+
+    def _read_gnucash_book(self):
+        """Reads the gnucash book"""
+        try:
+            self._book = piecash.open_book(
+                os.path.abspath(str(self._filepath)), readonly=True, open_if_lock=True
+            )
+        except GnucashException as error:
+            raise G2BException(
+                f"File does not exist or wrong format exception: {error.args[0]}"
+            ) from error
 
     def write_beancount_file(self) -> None:
         """
-        Parse the configuration file, read the csv export and convert everything such that a valid
+        Parse the gnucash file, read and convert everything such that a valid
         beancount ledger can be exported.
         """
-        self._logger.info("Start converting GnuCash CSV File to Beancount")
-        self._logger.debug("Input file: %s", self._filepath)
-        self._logger.debug("Config file: %s", self._config_path)
-        self._logger.debug("Config: %s", self._configs)
-        self._prepare_csv()
-        openings = self._get_open_account_directives()
-        transactions = self._get_transaction_directives()
-        events = self._events()
+        logger.info("Start converting GnuCash file to Beancount")
+        logger.debug("Input file: %s", self._filepath)
+        logger.debug("Config file: %s", self._config_path)
+        logger.debug("Config: %s", self._configs)
+        self._read_gnucash_book()
+        transactions = self._get_transactions()
+        openings = self._get_open_account_directives(transactions)
+        events = self._get_event_directives()
+        balance_statements = self._get_balance_directives()
+        commodities = self._get_commodities()
         with open(self._output_path, "w", encoding="utf8") as file:
-            file.write(self._get_header_str())
-            file.write(self._get_commodities_str())
-            printer.print_entries(events + openings + transactions, file=file)
-        self._logger.info("Finished writing beancount file: '%s'", self._output_path)
+            printer.print_entries(
+                commodities + openings + events + transactions + balance_statements,
+                file=file,
+                prefix=self._get_header_str(),
+            )
+        logger.info("Finished writing beancount file: '%s'", self._output_path)
         self._verify_output()
 
-    def _prepare_csv(self) -> None:
-        """Sanitizes the gnucash export"""
-        self._logger.info("Preparing dataframe")
-        self._dataframe = pd.read_csv(self._filepath)
-        self._dataframe.columns = self._CSV_COLUMN_NAMES
-        self._dataframe["FullAccountName"] = self._dataframe["FullAccountName"].apply(
-            self._apply_renaming_patterns
-        )
-        thousands_symbol = self._gnucash_config.get("thousands_symbol", ",")
-        decimal_symbol = self._gnucash_config.get("decimal_symbol", ".")
-        for col in ["Rate", "ValueNumerical"]:
-            self._dataframe[col] = self._dataframe[col].str.replace(thousands_symbol, "")
-            self._dataframe[col] = self._dataframe[col].str.replace(decimal_symbol, ".")
-        self._dataframe["Rate"] = self._dataframe["Rate"].apply(simple_eval)
-        for col in ["Rate", "ValueNumerical"]:
-            self._dataframe[col] = pd.to_numeric(self._dataframe[col])
-        self._dataframe["Date"] = pd.to_datetime(self._dataframe["Date"], format="%d.%m.%Y")
-        self._dataframe.sort_values(by="Date", inplace=True)
+    def _get_transactions(self):
+        transactions = []
+        for transaction in track(self._book.transactions, description="Parsing Transactions"):
+            skip_template = "Skipped transaction as it is malformed: %s"
+            if len(transaction.splits) == 1 and transaction.splits[0].value == 0:
+                logger.warning(skip_template, {transaction})
+                continue
+            if transaction.splits[0].account.commodity.mnemonic == "template":
+                logger.warning(skip_template, {transaction})
+                continue
+            postings = self._get_postings(transaction.splits)
+            posting_flags = [posting.flag for posting in postings]
+            transaction_flag = "!" if "!" in posting_flags else "*"
+            transactions.append(
+                data.Transaction(
+                    meta={"filename": self._filepath, "lineno": -1},
+                    date=transaction.post_date,
+                    flag=transaction_flag,
+                    payee="",
+                    narration=self._sanitize_description(transaction.description),
+                    tags=data.EMPTY_SET,
+                    links=set(),
+                    postings=postings,
+                )
+            )
+        transactions.sort(key=lambda txn: txn.date)
+        return transactions
+
+    def _get_postings(self, splits):
+        postings = []
+        for split in splits:
+            account_name = str(self._apply_renaming_patterns(split.account.fullname))
+            posting_currency = split.account.commodity.mnemonic.replace(" ", "")
+            units = amount.Amount(number=split.quantity * D("1.0"), currency=posting_currency)
+            not_reconciled_symbol = self._gnucash_config.get("not_reconciled_symbol")
+            flag = "!" if not_reconciled_symbol in split.reconcile_state else "*"
+            price = self._calculate_price_of_split(split)
+            posting = data.Posting(
+                account=account_name, units=units, cost=None, price=price, flag=flag, meta=None
+            )
+            self._commodities[posting_currency].append(split.transaction.post_date)
+            self._commodities[posting_currency] = [min(self._commodities[posting_currency])]
+            postings.append(posting)
+        return postings
+
+    def _calculate_price_of_split(self, split):
+        if split.account.commodity == split.transaction.currency:
+            return None
+        currency = split.transaction.currency.mnemonic.replace(" ", "")
+        if split.value == 0 and split.quantity == 0:
+            return data.Amount(D("0"), currency)
+        return data.Amount(abs(split.value / split.quantity), currency)
+
+    def _get_event_directives(self) -> List[data.Event]:
+        """Parse beancount configuration and create event directives"""
+        events = []
+        for date, event_description in self._bean_config.get("events", {}).items():
+            event_type, description = event_description.split(" ", maxsplit=1)
+            events.append(data.Event(date=date, type=event_type, description=description, meta={}))
+        return events
+
+    def _get_balance_directives(self) -> List[data.Balance]:
+        balances = []
+        default_currency = self._gnucash_config.get("default_currency")
+        date_of_tomorrow = datetime.date.today() + datetime.timedelta(days=1)
+        for account, balance_value in self._bean_config.get("balance-values", {}).items():
+            currency = self._non_default_account_currencies.get(account, default_currency)
+            balances.append(
+                data.Balance(
+                    date=date_of_tomorrow,
+                    account=account,
+                    amount=amount.Amount(number=D(str(balance_value)), currency=currency),
+                    meta={},
+                    tolerance=None,
+                    diff_amount=None,
+                )
+            )
+        return balances
+
+    def _get_commodities(self):
+        commodities = []
+        for commodity, date in self._commodities.items():
+            commodities.append(
+                data.Commodity(
+                    date=date[0],
+                    currency=commodity,
+                    meta={"filename": self._filepath, "lineno": -1},
+                )
+            )
+        return commodities
 
     def _apply_renaming_patterns(self, account_name):
         """
@@ -168,136 +237,6 @@ class GnuCashCSV2Beancount:
         for pattern, replacement in self._account_rename_patterns:
             account_name = re.sub(pattern, repl=replacement, string=account_name)
         return account_name.title()
-
-    def _get_open_account_directives(self) -> List[data.Open]:
-        """
-        Gets a list of unique account names and their corresponding date where they first appeared.
-
-        :returns: A list of beancount open directives
-        """
-        dataframe = self._dataframe.filter(items=["Date", "FullAccountName"])
-        dataframe.drop_duplicates(subset=["FullAccountName"], inplace=True)
-        openings = []
-        for index, row in track(
-            dataframe.iterrows(), total=len(dataframe), description="Parsing Account Openings..."
-        ):
-            currency = self._non_default_account_currencies.get(
-                row["FullAccountName"], self._gnucash_config.get("default_currency")
-            )
-            openings.append(
-                data.Open(
-                    meta={"filename": self._filepath, "lineno": index},
-                    date=row["Date"].date(),
-                    account=row["FullAccountName"],
-                    currencies=[currency],
-                    booking=data.Booking.FIFO,
-                )
-            )
-        return openings
-
-    def _get_transaction_directives(self) -> List[data.Transaction]:
-        """
-        Groups every entry inside the gnucash export by the respective BookingID.
-        For each group a transaction object with all corresponding postings is created and returned.
-
-        :return: List of beancount transactions
-        """
-        entries = []
-        groups = self._dataframe.groupby(by="BookingID")
-        for _, group in track(groups, description="Parsing Transactions..."):
-            postings = self._get_transaction_postings(group)
-            transaction = self._get_transaction(group, postings)
-            entries.append(transaction)
-        entries = sorted(entries, key=lambda x: x.date)
-        return entries
-
-    def _get_transaction_postings(self, transaction_group) -> List[data.Posting]:
-        """
-        Returns a list of beancount postings that reflect one transaction.
-
-        :param transaction_group: One transaction grouped by the gnucash BookingID
-        :return: List of postings that are part of this transaction
-        """
-        postings = []
-        default_currency = self._gnucash_config.get("default_currency")
-        for _, row in transaction_group.iterrows():
-            currency = self._non_default_account_currencies.get(
-                row["FullAccountName"], default_currency
-            )
-            # need to convert numerical value back to string as it would have otherwise the
-            # imperfections of float, e.g 2.2 could become 2.2000000000000000001234312312334
-            unit = amount.Amount(D(str(row["ValueNumerical"])), currency=currency)
-            price = float(row["Rate"]) if float(row["Rate"]) != 1.0 else None
-            if price is not None:
-                price = self._get_price_of_posting(price, currency, transaction_group)
-            postings.append(
-                data.Posting(
-                    account=row["FullAccountName"],
-                    units=unit,
-                    cost=None,
-                    price=price,
-                    flag=None,
-                    meta=None,
-                )
-            )
-        return postings
-
-    def _get_price_of_posting(self, price, unit_currency, transaction_group) -> amount.Amount:
-        """
-        Gets the price, and it's corresponding currency of the transaction.
-        Assigns the default currency if the unit_currency differs from it. If the default and
-        unit currencies are equal though, then the gnucash export had an issue. If the transaction
-        has only two postings with two separate currencies it takes the currency of the other
-        transaction, such that beancount can estimate the correct price for it later.
-
-        :param price: The price/conversion number of the currency
-        :param unit_currency: The currency of the transaction itself
-        :param transaction_group: The dataframe group containing all postings
-        :return: The amount.Amount of the price of this transaction
-        """
-        default_currency = self._gnucash_config.get("default_currency")
-        price_currency = default_currency
-        account_currencies = [
-            self._non_default_account_currencies.get(row["FullAccountName"], default_currency)
-            for _, row in transaction_group.iterrows()
-        ]
-        if unit_currency == default_currency and len(set(account_currencies)) == 2:
-            currency_set = set(account_currencies)
-            price_currency = currency_set.difference({unit_currency}).pop()
-        price = amount.Amount(D(price), currency=price_currency)
-        return price
-
-    def _get_transaction(self, transaction_group, postings) -> data.Transaction:
-        """
-        Returns a beancount Transaction object by combining the transaction meta information
-        with the previously created postings.
-
-        :param transaction_group: The gnucash dataframe group
-        :param postings: The beancount postings that are part of this transaction
-        :return:
-        """
-        unique_descriptions = transaction_group["Description"].unique()
-        if len(unique_descriptions) > 1:
-            self._logger.warning(
-                "More than one description found for a transaction: %s, "
-                "using only first description: '%s'",
-                unique_descriptions,
-                transaction_group["Description"].iloc[0],
-            )
-        reconciliations = transaction_group["Reconciliation"].values
-        # if one symbol is not reconciled mark all as not reconciled with !
-        flag = "!" if self._gnucash_config.get("not_reconciled_symbol") in reconciliations else "*"
-        transaction = data.Transaction(
-            meta={"filename": self._filepath, "lineno": transaction_group.index[0]},
-            date=transaction_group["Date"].iloc[0].date(),
-            flag=flag,
-            payee=None,
-            narration=self._sanitize_description(transaction_group["Description"].iloc[0]),
-            tags=data.EMPTY_SET,
-            links=set(),
-            postings=postings,
-        )
-        return transaction
 
     def _sanitize_description(self, description) -> str:
         """Removes unwanted characters from a transaction narration"""
@@ -312,52 +251,51 @@ class GnuCashCSV2Beancount:
         header = "\n".join(plugins + [""] + options)
         return f"{header}\n\n"
 
-    def _get_commodities_str(self) -> str:
-        """
-        Returns a string with the commodities, combined from the default currency and the configured
-        non default currencies.
-        """
-        earliest_date = self._dataframe["Date"].iloc[0].date()
-        default_currency = [
-            f"{earliest_date} commodity {self._gnucash_config.get('default_currency')}"
-        ]
-        commodities_strs = [
-            f"{earliest_date} commodity {commodity}"
-            for commodity in self._non_default_account_currencies.values()
-        ]
-        joined_str = "\n".join(default_currency + commodities_strs)
-        return f"{joined_str}\n\n"
-
     def _verify_output(self) -> None:
         """
         Verifies the created beancount ledger by running the respective beancount parser and
         beancount validator. If any errors are found they are logged to the console.
         """
-        self._logger.info("Verifying output file")
+        logger.info("Verifying output file")
         entries, parsing_errors, options = parse_file(self._output_path)
         for error in parsing_errors:
-            self._logger.error(error)
+            logger.error(error)
         validation_errors = validate(
             entries=entries,
             options_map=options,
             extra_validations=validation.HARDCORE_VALIDATIONS,
         )
         for error in validation_errors:
-            self._logger.warning(error)
+            logger.warning(error)
         if not parsing_errors and not validation_errors:
-            self._logger.info("No parsing or validation errors found")
+            logger.info("No parsing or validation errors found")
         if parsing_errors:
-            self._logger.warning("Found %s parsing errors", len(parsing_errors))
+            logger.warning("Found %s parsing errors", len(parsing_errors))
         if validation_errors:
-            self._logger.warning("Found %s validation errors", len(validation_errors))
+            logger.warning("Found %s validation errors", len(validation_errors))
 
-    def _events(self):
-        """Parse beancount configuration and create event directives"""
-        events = []
-        for date, event_description in self._bean_config.get("events", {}).items():
-            event_type, description = event_description.split(" ", maxsplit=1)
-            events.append(data.Event(date=date, type=event_type, description=description, meta={}))
-        return events
+    def _get_open_account_directives(self, transactions):
+        account_date_tuples = [
+            (posting.account, transaction.date, posting.units.currency)
+            for transaction in transactions
+            for posting in transaction.postings
+        ]
+        accounts = defaultdict(list)
+        for account, date, currency in account_date_tuples:
+            accounts[account].append((date, currency))
+        openings = []
+        for account, date_currency_tuples in accounts.items():
+            dates, currencies = zip(*date_currency_tuples)
+            openings.append(
+                data.Open(
+                    account=account,
+                    currencies=[currencies[0]],
+                    date=min(dates),
+                    meta={"filename": self._filepath, "lineno": -1},
+                    booking=None,
+                )
+            )
+        return openings
 
 
 @click.command()
@@ -366,7 +304,7 @@ class GnuCashCSV2Beancount:
     "-i",
     "input_path",
     type=click.Path(exists=True),
-    help="Gnucash CSV file path",
+    help="Gnucash file path",
     required=True,
 )
 @click.option("--output", "-o", help="Output file path", required=True)
@@ -375,13 +313,16 @@ class GnuCashCSV2Beancount:
 )
 def main(input_path: Path, output: Path, config: Path) -> None:
     """
-    GnuCash CSV to Beancount Converter - g2b
+    GnuCash to Beancount Converter - g2b
 
-    This tool allows you to convert a gnucash csv export into a new beancount ledger.
+    This tool allows you to convert a gnucash sql file into a new beancount ledger.
     """
-    g2b = GnuCashCSV2Beancount(input_path, output, config)
-    g2b.write_beancount_file()
+    try:
+        g2b = GnuCash2Beancount(input_path, output, config)
+        g2b.write_beancount_file()
+    except G2BException as error:
+        logging.error(error)
 
 
 if __name__ == "__main__":
-    main()  # pylint: disable=no-value-for-parameter)
+    main()  # pylint: disable=no-value-for-parameter

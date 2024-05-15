@@ -1,30 +1,39 @@
-# Gnucash CSV to Beancount
+# Gnucash to Beancount
 
-This project can convert a [Gnucash](https://github.com/Gnucash/gnucash) CSV Export into a new
+This project can convert a [Gnucash](https://github.com/Gnucash/gnucash) sql file into a new
 [beancount](https://github.com/beancount/beancount) file.
 It is not intended to continuously import gnucash data into an existing beancount ledger, as this 
 script will also add plugins and beancount options to the beginning of the file.
+This project started with the intention to convert a gnucash csv export, but it turned out that the
+csv exported from gnucash is not quite reliable.
+Read more about that at in the section [Unreliable Export](#unreliable-gnucash-csv-export).
+Because of that I refactored it to use the [piecash](https://pypi.org/project/piecash/) library.
+With that it has the same goal as the already existing repository from
+[henriquebastos/gnucash-to-beancount](https://github.com/henriquebastos/gnucash-to-beancount).
+The implementation in this repository does offer few configuration options though.
+
+One downside I have encountered sofar are stock splits. 
+Those are currently not supported and have to be added manually to the output by following the
+official documentation
+[Beancount Stock Splits](https://beancount.github.io/docs/trading_with_beancount.html#stock-splits).
+Luckily those splits don't happen too often.
+
+## Prerequisite
+
+Your gnucash file must be in a sql format.
+I implemented it with a sqlite3 file, which was saved by GnuCash v5.4.
+If your current genucash file is not in the right format it is always possible to just save it 
+as a sqlite3 file.
 
 ## Install
 
-To install `gnucash csv to beancount` simply use `pip`:
+To install `gnucash to beancount` simply use `pip`:
 
 ```bash
 pip install g2b
 ```
 
 ## Usage
-
-### Create a GnuCash Export
-
-Start the export by navigating to `File > Export > Export Transactions to CSV`. 
-You can follow the official gnucash [Export Transactions](https://www.gnucash.org/docs/v4/C/gnucash-help/trans-export.html)
-Documentation.
-Consider the following points while configuring the export:
-
-- Use the comma seperator
-- Check the option `Use Qoutes`
-- **Do not** use the simple layout
 
 ### Create Configuration for g2b
 
@@ -45,7 +54,7 @@ gnucash:  # here you can specify details about your gnucash export
     - ["Money@[Bank]", "Assets:Money at Bank"]
   non_default_account_currencies:  # Here you have to name all accounts that deviate from the default currency
     Assets:Cash:Wallet: "NZD"
-beancount:  # here you can add beancount options and plugins that should be added to output file
+beancount:  # here you can add beancount options, plugins and events that should be added to output file
   options:
     - ["title", "Exported GnuCash Book"]  # options should be key value pairs
     - ["operating_currency", "EUR"]
@@ -61,59 +70,34 @@ beancount:  # here you can add beancount options and plugins that should be adde
 
 ## Execute g2b
 
-Now that you have the gnucash export and the corresponding configuration file you can call:
+Once you created the needed configuration file you can call:
 
 ```bash
-g2b -i gnuchash.csv -c config.yaml -o my.beancount
+g2b -i book.gnucash -c config.yaml -o my.beancount
 ```
 
-The script will automatically call beancount to parse and verify the export, such that you know
-if the conversion was successful or not.
+The script will, at the end, automatically call beancount to parse and verify the export, such
+that you know if the conversion was successful or not.
 
 ## Limitations
 
-The conversion sadly doesn't work perfectly when it comes to transactions with multiple currencies,
-or currency conversions. 
-This is in part due to the gnucash export itself.
-The column `Commodity/Currency` doesn't truly reflect the currency of the transaction.
-Furthermore, the column `Ammount with Symbol` has ambiguous symbols as it doesn't use the ISO-4217
-Currency codes. 
-With that it is for example not clear if `100 $` are USD or NZD. 
-A change was already proposed back in 2017:
-[gnucash bug - use ISO 4217 currency symbols in output](https://bugs.gnucash.org/show_bug.cgi?id=791651).
+Currently, this project can not deal with stock splits.
+Those will not be added to the beancount output and have to be added manually.
+To do that follow the official
+[Documentation](https://beancount.github.io/docs/trading_with_beancount.html#stock-splits).
 
-To work a bit around that you have to specify currencies inside the configuration file for your accounts,
-that deviate from the default currency.
-After the conversion it is still possible though that beancount will complain about transactions
-with multiple currency. 
-That is also because gnucash assigns the `Rate/Price` inside the export to the wrong account.
-For example a ledger (with default currency EUR) has a transaction from an NZD account to an EUR
-account.
-Transactions that were exported correctly will appear like this:
+## Unreliable Gnucash CSV Export
 
-| Date         | FullAccountName        | Amount Num | Rate/Price |
-|--------------|------------------------|------------|------------|
-| 2024-05-09   | Assets:Wallet(NZD)     | 200 $      | 0.56       |
-| 2024-05-09   | Expense:Groceries(EUR) | 111.74 €   | 1.00       |
+While starting out with CSV exports I found the following issues that kept me from
+progressing with the CSV exports.
 
-The non-default currency account `Assets:Wallet(NZD)` has here a `Rate/Price` of `0.56`, whereas
-the other position has a value of `1.00`.
-
-In some cases the export has an entry like this though:
-
-| Date         | FullAccountName        | Amount Num | Rate/Price |
-|--------------|------------------------|------------|------------|
-| 2024-05-09   | Assets:Wallet(NZD)     | 200 $      | 1.00       |
-| 2024-05-09   | Expense:Groceries(EUR) | 111.74 €   | 0.56       |
-
-Where the `Rate/Price` of `0.56` is assigned to the account with the default currenyc.
-That leads to a currency conversion from EUR to EUR, which results in problems in beancount.
-Transactions that only consist of two postings should be fine after a small change. 
-If the transaction has multiple postings though you have to fix them manually. 
-Luckily beancount will tell you with errors/warnings where you have to look to fix them.
-
-It is also possible to add the beancount option `inferred_tolerance_default`
-(see [Beancount Options](https://beancount.github.io/docs/beancount_options_reference.html)) to
-specify a tolerance for certain currencies.
-This is merely a way to mute the warnings though as it doesn't fix the problem, it just tells
-beancount to be less strict. 
+- The gnucash csv export does not offer reliable currency information.
+  Transaction with values like `100 $` cannot be properly understood as it, for example, could be
+  USD or NZD.
+  An offical bug report is open since 2017:
+  [gnucash bug - use ISO 4217 currency symbols in output](https://bugs.gnucash.org/show_bug.cgi?id=791651).
+- The `Rate/Price` value is sometimes added to the wrong posting in transactions with multiple 
+  currencies.
+  Because of that it wasn't easily recognizable how to convert which prices.
+- And probably the most severe issue: Some transactions were completely missing inside the export.
+  As I couldn't figure out why I decided to use the `piecash` library. 
