@@ -33,6 +33,8 @@ To install `gnucash to beancount` simply use `pip`:
 pip install g2b
 ```
 
+Test with ``g2b --version`` if the installation was successful. 
+
 ## Usage
 
 ### Create Configuration for g2b

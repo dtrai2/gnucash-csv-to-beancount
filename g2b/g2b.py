@@ -299,6 +299,7 @@ class GnuCash2Beancount:
 
 
 @click.command()
+@click.version_option(message="%(version)s")
 @click.option(
     "--input",
     "-i",
