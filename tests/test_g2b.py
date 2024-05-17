@@ -56,7 +56,7 @@ class TestCLI:
     def test_cli_version(self):
         result = self.cli_runner.invoke(main, "--version")
         assert result.exit_code == 0, f"{result.exc_info}"
-        assert version('g2b') in result.output
+        assert version("g2b") in result.output
 
 
 class TestGnuCash2Beancount:
