@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # pylint: disable=missing-docstring
 # pylint: disable=attribute-defined-outside-init
 # pylint: disable=protected-access
@@ -399,3 +400,15 @@ option "title" "Exported GnuCash Book"
         assert g2b._fava_config == {}
         for commodity in commodities:
             assert "precision" not in commodity.meta
+
+    def test_postings_have_no_flag_if__flag_postings__is_set_to_false(self, tmp_path):
+        config_path = tmp_path / "config.yaml"
+        self.test_config.update({"beancount": {"flag_postings": False}})
+        config_path.write_text(yaml.dump(self.test_config))
+        g2b = GnuCash2Beancount(self.gnucash_path, Path(), config_path)
+        g2b._read_gnucash_book()
+        transactions = g2b._get_transactions()
+        for transaction in transactions:
+            assert transaction.flag == "*"
+            for posting in transaction.postings:
+                assert posting.flag is None

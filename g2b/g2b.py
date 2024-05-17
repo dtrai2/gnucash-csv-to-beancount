@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """This module provides a converter that can translate a gnucash sql file into a beancount file"""
 
 import datetime
@@ -176,7 +177,9 @@ class GnuCash2Beancount:
             posting_currency = split.account.commodity.mnemonic.replace(" ", "")
             units = amount.Amount(number=split.quantity * D("1.0"), currency=posting_currency)
             not_reconciled_symbol = self._gnucash_config.get("not_reconciled_symbol")
-            flag = "!" if not_reconciled_symbol in split.reconcile_state else "*"
+            flag = None
+            if self._bean_config.get("flag_postings", True):
+                flag = "!" if not_reconciled_symbol in split.reconcile_state else "*"
             price = self._calculate_price_of_split(split)
             posting = data.Posting(
                 account=account_name, units=units, cost=None, price=price, flag=flag, meta=None
