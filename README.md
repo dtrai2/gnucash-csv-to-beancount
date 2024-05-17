@@ -66,6 +66,8 @@ beancount:  # here you can add beancount options, plugins and events that should
   events:
     2024-05-05: type description string  # optional events that should be added to the output, the
                                          # first space is used to split between space and description
+fava:  # optional configuration specific to fava
+  commodity-precision: 3  # set the render precision of values for the fava web-frontend
 ```
 
 ## Execute g2b

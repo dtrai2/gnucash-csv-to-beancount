@@ -371,3 +371,25 @@ option "title" "Exported GnuCash Book"
         g2b = GnuCash2Beancount(gnucash_file, Path(), config_path)
         with pytest.raises(G2BException, match="File does not exist or wrong format exception.*"):
             g2b._read_gnucash_book()
+
+    def test_commodity_has_precision_if_fava_config_is_present(self, tmp_path):
+        config_path = tmp_path / "config.yaml"
+        self.test_config.update({"fava": {"commodity-precision": "3"}})
+        config_path.write_text(yaml.dump(self.test_config))
+        g2b = GnuCash2Beancount(self.gnucash_path, Path(), config_path)
+        g2b._read_gnucash_book()
+        g2b._get_transactions()
+        commodities = g2b._get_commodities()
+        for commodity in commodities:
+            assert commodity.meta.get("precision") == 3
+
+    def test_commodity_has_no_precision_if_fava_config_is_not_present(self, tmp_path):
+        config_path = tmp_path / "config.yaml"
+        config_path.write_text(yaml.dump(self.test_config))
+        g2b = GnuCash2Beancount(self.gnucash_path, Path(), config_path)
+        g2b._read_gnucash_book()
+        g2b._get_transactions()
+        commodities = g2b._get_commodities()
+        assert g2b._fava_config == {}
+        for commodity in commodities:
+            assert "precision" not in commodity.meta

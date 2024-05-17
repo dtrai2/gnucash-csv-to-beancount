@@ -82,6 +82,10 @@ class GnuCash2Beancount:
         return config
 
     @cached_property
+    def _fava_config(self) -> Dict:
+        return self._configs.get("fava", {})
+
+    @cached_property
     def _account_rename_patterns(self) -> List:
         """Returns a list of pattern that should be used to sanitize account names"""
         return (
@@ -219,13 +223,10 @@ class GnuCash2Beancount:
     def _get_commodities(self):
         commodities = []
         for commodity, date in self._commodities.items():
-            commodities.append(
-                data.Commodity(
-                    date=date[0],
-                    currency=commodity,
-                    meta={"filename": self._filepath, "lineno": -1},
-                )
-            )
+            meta = {"filename": self._filepath, "lineno": -1}
+            if self._fava_config.get("commodity-precision", None) is not None:
+                meta.update({"precision": self._fava_config.get("commodity-precision")})
+            commodities.append(data.Commodity(date=date[0], currency=commodity, meta=meta))
         return commodities
 
     def _apply_renaming_patterns(self, account_name):
