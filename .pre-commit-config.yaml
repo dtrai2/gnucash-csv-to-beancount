@@ -10,7 +10,6 @@ repos:
     - id: check-yaml
     - id: check-added-large-files
     - id: fix-encoding-pragma
-    - id: name-tests-test
 -   repo: https://github.com/psf/black
     rev: 24.4.2
     hooks:
