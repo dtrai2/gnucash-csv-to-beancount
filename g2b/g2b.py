@@ -133,9 +133,10 @@ class GnuCash2Beancount:
         events = self._get_event_directives()
         balance_statements = self._get_balance_directives()
         commodities = self._get_commodities()
+        prices = self._get_prices()
         with open(self._output_path, "w", encoding="utf8") as file:
             printer.print_entries(
-                commodities + openings + events + transactions + balance_statements,
+                commodities + openings + events + prices + transactions + balance_statements,
                 file=file,
                 prefix=self._get_header_str(),
             )
@@ -300,6 +301,20 @@ class GnuCash2Beancount:
                 )
             )
         return openings
+
+    def _get_prices(self):
+        prices = []
+        for price in self._book.prices:
+            prices.append(
+                data.Price(
+                    meta={"filename": self._filepath, "lineno": -1},
+                    currency=price.commodity.mnemonic.replace(" ", ""),
+                    amount=amount.Amount(number=price.value, currency=price.currency.mnemonic),
+                    date=price.date,
+                )
+            )
+        prices.sort(key=lambda x: x.date)
+        return prices
 
 
 @click.command()

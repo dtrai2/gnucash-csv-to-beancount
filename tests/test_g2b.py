@@ -412,3 +412,12 @@ option "title" "Exported GnuCash Book"
             assert transaction.flag == "*"
             for posting in transaction.postings:
                 assert posting.flag is None
+
+    def test_get_prices_returns_beancount_prices(self, tmp_path):
+        config_path = tmp_path / "config.yaml"
+        config_path.write_text(yaml.dump(self.test_config))
+        g2b = GnuCash2Beancount(self.gnucash_path, Path(), config_path)
+        g2b._read_gnucash_book()
+        prices = g2b._get_prices()
+        for price in prices:
+            assert isinstance(price, data.Price)
