@@ -3,6 +3,7 @@
 # pylint: disable=protected-access
 import datetime
 import re
+from importlib.metadata import version
 from pathlib import Path, PosixPath
 from unittest import mock
 
@@ -51,6 +52,11 @@ class TestCLI:
         assert re.match(
             r".*Path 'test_config.yml' does not exist.*", result.output, flags=re.DOTALL
         )
+
+    def test_cli_version(self):
+        result = self.cli_runner.invoke(main, "--version")
+        assert result.exit_code == 0, f"{result.exc_info}"
+        assert version("g2b") in result.output
 
 
 class TestGnuCash2Beancount:
