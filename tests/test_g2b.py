@@ -381,7 +381,7 @@ option "title" "Exported GnuCash Book"
         g2b._get_transactions()
         commodities = g2b._get_commodities()
         for commodity in commodities:
-            assert commodity.meta.get("precision") == 3
+            assert commodity.meta.get("precision") == "3"
 
     def test_commodity_has_no_precision_if_fava_config_is_not_present(self, tmp_path):
         config_path = tmp_path / "config.yaml"
